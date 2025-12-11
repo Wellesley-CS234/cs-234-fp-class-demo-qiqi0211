@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 
 st.title("Popular topics during and after Olympics 2024") 
@@ -25,39 +26,69 @@ df_all = pd.read_csv("data/alldata.csv")
 
 st.write("First, We are exploring the top 100 articles during 2024 summer Olympics and then we explore data for one month later")
 
-
 page = st.sidebar.radio("Select Page", ["Top 100 Articles", "Sports vs Non-Sports", "Languages"])
 
-df_all['date'] = pd.to_datetime(df_all['date'])
+df_all['article'] = df_all['article'].astype(str)
+# Convert date column to datetime
+df_all['date'] = pd.to_datetime(df_all['date'], errors='coerce')
+
 
 if page == "Top 100 Articles":
     st.title("Top 100 Articles During Olympics & One Month Later")
 
+    # --- Sidebar Filters ---
+    st.sidebar.markdown("### Filters")
+    
     # Country dropdown
-    country_list = ["All"] + sorted(df_o["country_code"].unique())
-    selected_country = st.selectbox("Country", country_list)
+    # Handle missing country_code just in case
+    if 'country_code' in df_o.columns:
+        country_list = ["All"] + sorted(df_o["country_code"].dropna().unique())
+        selected_country = st.sidebar.selectbox("Country", country_list)
+    else:
+        selected_country = "All"
 
-    # Date range slider (on main page)
+    # Filter Data based on Country selection
+    df_filtered_o = df_o.copy()
+    df_filtered_a = df_a.copy() # We need to filter the 'After' dataset too!
+
+    if selected_country != "All":
+        df_filtered_o = df_filtered_o[df_filtered_o['country_code'] == selected_country]
+        # Assuming df_a also has country_code. If not, you can't filter it.
+        if 'country_code' in df_filtered_a.columns:
+            df_filtered_a = df_filtered_a[df_filtered_a['country_code'] == selected_country]
+
+    # --- Time Series Chart ---
+    st.subheader("Trends over Time")
+    
+    # Date range slider
     min_date = df_all['date'].min().to_pydatetime()
     max_date = df_all['date'].max().to_pydatetime()
-    date_range = st.slider(
-        "Select date range for analysis",
+    
+    start_date, end_date = st.slider(
+        "Select date range",
         min_value=min_date,
         max_value=max_date,
         value=(min_date, max_date),
         format="YYYY-MM-DD"
     )
 
-    # Filter Top 100 by country
-    df_filtered = df_o.copy()
-    if selected_country != "All":
-        df_filtered = df_filtered[df_filtered['country_code'] == selected_country]
+    # Filter df_all by Date
+    mask = (df_all['date'] >= pd.to_datetime(start_date)) & (df_all['date'] <= pd.to_datetime(end_date))
+    df_chart = df_all.loc[mask]
 
+    fig = px.line(
+        df_chart, 
+        x='date', 
+        y='total_pageviews', 
+        markers=True,
+        title=f"Pageviews over time (Top 10 in {selected_country})"
+    )
+    st.plotly_chart(fig, use_container_width=True)
     # -------------------------
     # 1️⃣ Top 100 Table (During Olympics)
     # -------------------------
     st.subheader("Top 100 Articles Table (During Olympics)")
-    df_filtered_sorted = df_filtered.sort_values("total_pageviews", ascending=False)
+    df_filtered_sorted = df_filtered_o.sort_values("total_pageviews", ascending=False)
     st.dataframe(df_filtered_sorted)
 
     # -------------------------
